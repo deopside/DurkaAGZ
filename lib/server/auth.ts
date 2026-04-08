@@ -66,7 +66,15 @@ function isValidTelegramInitData(initData: string): boolean {
 export function getTelegramUserFromRequest(req: NextRequest): TelegramUserInfo | null {
   try {
     const rawInitDataHeader = req.headers.get("x-telegram-init-data");
-    const initDataHeader = rawInitDataHeader ? decodeURIComponent(rawInitDataHeader) : null;
+    let initDataHeader: string | null = null;
+    if (rawInitDataHeader) {
+      try {
+        initDataHeader = decodeURIComponent(rawInitDataHeader);
+      } catch {
+        // If header is already plain text, use as-is.
+        initDataHeader = rawInitDataHeader;
+      }
+    }
     if (initDataHeader) {
       const isValid = isValidTelegramInitData(initDataHeader);
       if (isValid) {

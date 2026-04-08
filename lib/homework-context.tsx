@@ -74,9 +74,17 @@ export function HomeworkProvider({ children }: { children: ReactNode }) {
         const response = await fetch('/api/bootstrap', { headers: authHeaders });
         if (!response.ok) return;
         const payload = await response.json();
-        if (payload.homeworkData) setHomeworkData(payload.homeworkData);
-        if (payload.scheduleData) setScheduleData(payload.scheduleData);
-        if (payload.userAssignment) setUserAssignment(payload.userAssignment);
+        if (payload.homeworkData && Object.keys(payload.homeworkData).length > 0) {
+          setHomeworkData(payload.homeworkData);
+        }
+        if (payload.scheduleData && Object.keys(payload.scheduleData).length > 0) {
+          setScheduleData(payload.scheduleData);
+        }
+        if (payload.userAssignment) {
+          setUserAssignment(payload.userAssignment);
+        } else {
+          setUserAssignment(null);
+        }
         if (Array.isArray(payload.takenTopics)) setTakenTopics(new Set(payload.takenTopics));
         if (payload.notificationSettings) setNotificationSettings(payload.notificationSettings);
         setIsAdmin(Boolean(payload.isAdmin));
