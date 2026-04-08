@@ -6,7 +6,8 @@ export async function GET(req: NextRequest) {
   try {
     const telegramUser = getTelegramUserFromRequest(req);
     const telegramUserId = telegramUser?.id ?? null;
-    const isAdmin = telegramUserId !== null && telegramUserId === process.env.ADMIN_ID;
+    const adminId = (process.env.ADMIN_ID ?? "").trim();
+    const isAdmin = telegramUserId !== null && telegramUserId === adminId;
 
     const [{ data: homeworkRows, error: hwError }, { data: topicRows, error: topicError }, { data: scheduleRows, error: schError }, { data: assignmentRows, error: assignError }, { data: notificationRows, error: notifError }] =
       await Promise.all([

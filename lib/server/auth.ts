@@ -104,7 +104,7 @@ export function getTelegramUserFromRequest(req: NextRequest): TelegramUserInfo |
 }
 
 export function assertAdmin(req: NextRequest): { ok: true } | { ok: false; message: string; status: number } {
-  const adminId = process.env.ADMIN_ID;
+  const adminId = (process.env.ADMIN_ID ?? "").trim();
   if (!adminId) {
     return { ok: false, message: "ADMIN_ID is not configured", status: 500 };
   }

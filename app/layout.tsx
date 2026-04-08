@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import Script from 'next/script'
 import { HomeworkProvider } from '@/lib/homework-context'
 import './globals.css'
 
@@ -45,6 +46,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="font-sans antialiased bg-black text-white">
+        <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
         <HomeworkProvider>
           {children}
         </HomeworkProvider>
