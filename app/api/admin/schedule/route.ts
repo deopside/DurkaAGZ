@@ -32,7 +32,7 @@ export async function PUT(req: NextRequest) {
     const rows = entries.map((entry, index) => ({
       date_key: dateKey,
       pair_number: index + 1,
-      subjectName: entry.subjectName,
+      subjectname: entry.subjectName,
       type: entry.type,
       number: entry.number,
       room: entry.room,

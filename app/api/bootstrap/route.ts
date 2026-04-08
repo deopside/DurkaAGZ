@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
       await Promise.all([
         supabase.from("homework").select("subject,date,hours,minutes"),
         supabase.from("homework_topics").select("subject,topic_id,text"),
-        supabase.from("schedule_entries").select("id,date_key,pair_number,subjectName,type,number,room,teacher"),
+        supabase.from("schedule_entries").select("id,date_key,pair_number,subjectname,type,number,room,teacher"),
         telegramUserId ? supabase.from("topic_assignments").select("subject,topic_id").eq("telegram_user_id", telegramUserId).limit(1) : Promise.resolve({ data: [], error: null }),
         telegramUserId ? supabase.from("notification_settings").select("twenty_four_hours,twelve_hours").eq("telegram_user_id", telegramUserId).limit(1) : Promise.resolve({ data: [], error: null }),
       ]);
@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
       scheduleData[row.date_key].push({
         id: row.id,
         pairNumber: row.pair_number,
-        subjectName: row.subjectName,
+        subjectName: row.subjectname,
         type: row.type,
         number: row.number,
         room: row.room,
