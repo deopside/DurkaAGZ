@@ -19,6 +19,7 @@ interface HomeworkContextValue {
   setNotificationSettings: (settings: NotificationSettings) => void;
   saveNotificationSettings: (settings: NotificationSettings) => Promise<void>;
   isLoading: boolean;
+  isAdmin: boolean;
 }
 
 const defaultHomeworkData: HomeworkData = {
@@ -46,6 +47,7 @@ export function HomeworkProvider({ children }: { children: ReactNode }) {
     twelveHours: false,
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const telegramUserId = useMemo(() => getTelegramUserId(), []);
   const telegramInitData = useMemo(() => getTelegramInitData(), []);
@@ -56,6 +58,15 @@ export function HomeworkProvider({ children }: { children: ReactNode }) {
     }),
     [telegramUserId, telegramInitData],
   );
+
+  const fetchOrThrow = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const response = await fetch(input, init);
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.message ?? `Request failed: ${response.status}`);
+    }
+    return response;
+  };
 
   useEffect(() => {
     const bootstrap = async () => {
@@ -68,6 +79,7 @@ export function HomeworkProvider({ children }: { children: ReactNode }) {
         if (payload.userAssignment) setUserAssignment(payload.userAssignment);
         if (Array.isArray(payload.takenTopics)) setTakenTopics(new Set(payload.takenTopics));
         if (payload.notificationSettings) setNotificationSettings(payload.notificationSettings);
+        setIsAdmin(Boolean(payload.isAdmin));
       } finally {
         setIsLoading(false);
       }
@@ -77,7 +89,7 @@ export function HomeworkProvider({ children }: { children: ReactNode }) {
   }, [authHeaders]);
 
   const updateTopics = async (subject: string, date: string, topics: Topic[], hours = '10', minutes = '00') => {
-    await fetch('/api/admin/homework', {
+    await fetchOrThrow('/api/admin/homework', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', ...authHeaders },
       body: JSON.stringify({ subject, date, topics, hours, minutes }),
@@ -89,7 +101,7 @@ export function HomeworkProvider({ children }: { children: ReactNode }) {
   };
 
   const clearTopics = async (subject: string) => {
-    await fetch(`/api/admin/homework?subject=${encodeURIComponent(subject)}`, {
+    await fetchOrThrow(`/api/admin/homework?subject=${encodeURIComponent(subject)}`, {
       method: 'DELETE',
       headers: authHeaders,
     });
@@ -123,7 +135,7 @@ export function HomeworkProvider({ children }: { children: ReactNode }) {
   };
 
   const cancelUserAssignment = async () => {
-    await fetch('/api/topics/cancel', {
+    await fetchOrThrow('/api/topics/cancel', {
       method: 'DELETE',
       headers: authHeaders,
     });
@@ -148,7 +160,7 @@ export function HomeworkProvider({ children }: { children: ReactNode }) {
   };
 
   const updateScheduleForDate = async (day: number, month: number, year: number, entries: ScheduleEntry[]) => {
-    await fetch('/api/admin/schedule', {
+    await fetchOrThrow('/api/admin/schedule', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', ...authHeaders },
       body: JSON.stringify({ day, month, year, entries }),
@@ -161,7 +173,7 @@ export function HomeworkProvider({ children }: { children: ReactNode }) {
   };
 
   const saveNotificationSettings = async (settings: NotificationSettings) => {
-    await fetch('/api/notifications/settings', {
+    await fetchOrThrow('/api/notifications/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', ...authHeaders },
       body: JSON.stringify(settings),
@@ -169,7 +181,7 @@ export function HomeworkProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <HomeworkContext.Provider value={{ homeworkData, updateTopics, clearTopics, userAssignment, assignTopicToUser, cancelUserAssignment, isTopicTaken, scheduleData, getScheduleForDate, updateScheduleForDate, notificationSettings, setNotificationSettings, saveNotificationSettings, isLoading }}>
+    <HomeworkContext.Provider value={{ homeworkData, updateTopics, clearTopics, userAssignment, assignTopicToUser, cancelUserAssignment, isTopicTaken, scheduleData, getScheduleForDate, updateScheduleForDate, notificationSettings, setNotificationSettings, saveNotificationSettings, isLoading, isAdmin }}>
       {children}
     </HomeworkContext.Provider>
   );

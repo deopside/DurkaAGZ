@@ -16,7 +16,7 @@ export default function Page() {
   const [currentPage, setCurrentPage] = useState<PageType>('home');
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<{ day: number; month: number; year: number } | null>(null);
-  const { notificationSettings, setNotificationSettings, saveNotificationSettings } = useHomework();
+  const { notificationSettings, setNotificationSettings, saveNotificationSettings, isAdmin } = useHomework();
 
   const subjects = [
     'РХБЗ', 'ОСМ', 'ППП', 'ТПМИ', 'SMM',
@@ -40,8 +40,13 @@ export default function Page() {
           <HomePage
             subjects={subjects}
             onSubjectSelect={handleSubjectSelect}
-            onAdminClick={() => setCurrentPage('admin')}
+            onAdminClick={() => {
+              if (isAdmin) {
+                setCurrentPage('admin');
+              }
+            }}
             onCalendarClick={() => setCurrentPage('calendar')}
+            isAdmin={isAdmin}
           />
         )}
         {currentPage === 'detail' && selectedSubject && (
@@ -51,7 +56,7 @@ export default function Page() {
             onBackToHome={() => setCurrentPage('home')}
           />
         )}
-        {currentPage === 'admin' && (
+        {currentPage === 'admin' && isAdmin && (
           <AdminPanelPage
             subjects={subjects}
             onBackToHome={() => setCurrentPage('home')}
@@ -83,7 +88,7 @@ export default function Page() {
             onBackToCalendar={() => setCurrentPage('calendar')}
           />
         )}
-        {currentPage === 'admin-calendar' && (
+        {currentPage === 'admin-calendar' && isAdmin && (
           <AdminCalendarPage
             onBackToHome={() => setCurrentPage('home')}
           />

@@ -10,6 +10,7 @@ interface HomePageProps {
   onSubjectSelect: (subject: string) => void;
   onAdminClick: () => void;
   onCalendarClick: () => void;
+  isAdmin: boolean;
 }
 
 const HOME_INFO_TEXT = `Пункт 1. ОРХЗ – Основы радиационной и химической защиты. Преподаватели: Лекция - Ткаченко Т.Е., ПЗ - Кольцов Г.И.
@@ -29,6 +30,7 @@ export default function HomePage({
   onSubjectSelect,
   onAdminClick,
   onCalendarClick,
+  isAdmin,
 }: HomePageProps) {
   const [showInfoModal, setShowInfoModal] = useState(false);
 
@@ -38,14 +40,16 @@ export default function HomePage({
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-white">DurkaAGZ</h1>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onAdminClick}
-            className="bg-transparent border-gray-700 text-white hover:bg-gray-900"
-          >
-            ADMIN
-          </Button>
+          {isAdmin && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onAdminClick}
+              className="bg-transparent border-gray-700 text-white hover:bg-gray-900"
+            >
+              ADMIN
+            </Button>
+          )}
           <button
             onClick={() => setShowInfoModal(true)}
             className="p-2 hover:bg-gray-900 rounded-lg transition"

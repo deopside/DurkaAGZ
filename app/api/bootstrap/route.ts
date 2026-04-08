@@ -5,6 +5,7 @@ import { getTelegramUserFromRequest } from "@/lib/server/auth";
 export async function GET(req: NextRequest) {
   const telegramUser = getTelegramUserFromRequest(req);
   const telegramUserId = telegramUser?.id ?? null;
+  const isAdmin = telegramUserId !== null && telegramUserId === process.env.ADMIN_ID;
 
   const [{ data: homeworkRows, error: hwError }, { data: topicRows, error: topicError }, { data: scheduleRows, error: schError }, { data: assignmentRows, error: assignError }, { data: notificationRows, error: notifError }] =
     await Promise.all([
@@ -68,5 +69,5 @@ export async function GET(req: NextRequest) {
         twelveHours: notificationRows[0].twelve_hours,
       };
 
-  return NextResponse.json({ homeworkData, scheduleData, userAssignment, takenTopics, notificationSettings });
+  return NextResponse.json({ homeworkData, scheduleData, userAssignment, takenTopics, notificationSettings, isAdmin });
 }

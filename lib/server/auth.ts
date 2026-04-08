@@ -71,6 +71,11 @@ export function getTelegramUserFromRequest(req: NextRequest): TelegramUserInfo |
   }
 
   // Dev fallback when opened outside Telegram.
+  // Never trust this in production.
+  if (process.env.NODE_ENV === "production") {
+    return null;
+  }
+
   const fallbackUserId = req.headers.get("x-telegram-user-id");
   if (fallbackUserId) {
     return { id: fallbackUserId };
