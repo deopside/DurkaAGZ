@@ -65,7 +65,8 @@ function isValidTelegramInitData(initData: string): boolean {
 
 export function getTelegramUserFromRequest(req: NextRequest): TelegramUserInfo | null {
   try {
-    const initDataHeader = req.headers.get("x-telegram-init-data");
+    const rawInitDataHeader = req.headers.get("x-telegram-init-data");
+    const initDataHeader = rawInitDataHeader ? decodeURIComponent(rawInitDataHeader) : null;
     if (initDataHeader) {
       const isValid = isValidTelegramInitData(initDataHeader);
       if (isValid) {
@@ -73,8 +74,6 @@ export function getTelegramUserFromRequest(req: NextRequest): TelegramUserInfo |
         if (id) {
           return { id };
         }
-      } else {
-        console.error("Telegram initData is invalid or expired");
       }
     }
 

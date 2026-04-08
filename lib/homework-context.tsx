@@ -54,7 +54,7 @@ export function HomeworkProvider({ children }: { children: ReactNode }) {
   const authHeaders = useMemo(
     () => ({
       ...(telegramUserId ? { 'x-telegram-user-id': telegramUserId } : {}),
-      ...(telegramInitData ? { 'x-telegram-init-data': telegramInitData } : {}),
+      ...(telegramInitData ? { 'x-telegram-init-data': encodeURIComponent(telegramInitData) } : {}),
     }),
     [telegramUserId, telegramInitData],
   );
