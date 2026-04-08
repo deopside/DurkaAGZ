@@ -1,0 +1,94 @@
+import { NextRequest } from "next/server";
+import crypto from "node:crypto";
+
+interface TelegramUserInfo {
+  id: string;
+}
+
+function parseTelegramUserIdFromInitData(initData: string): string | null {
+  const params = new URLSearchParams(initData);
+  const userRaw = params.get("user");
+  if (!userRaw) {
+    return null;
+  }
+
+  try {
+    const user = JSON.parse(userRaw) as { id?: number | string };
+    if (!user?.id) {
+      return null;
+    }
+    return String(user.id);
+  } catch {
+    return null;
+  }
+}
+
+function isValidTelegramInitData(initData: string): boolean {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (!botToken) {
+    return false;
+  }
+
+  const params = new URLSearchParams(initData);
+  const hash = params.get("hash");
+  const authDate = Number(params.get("auth_date"));
+  if (!hash || Number.isNaN(authDate)) {
+    return false;
+  }
+
+  const maxAgeSec = Number(process.env.TG_INITDATA_MAX_AGE_SEC ?? "86400");
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (nowSec - authDate > maxAgeSec) {
+    return false;
+  }
+
+  const dataCheckEntries: string[] = [];
+  for (const [key, value] of params.entries()) {
+    if (key !== "hash") {
+      dataCheckEntries.push(`${key}=${value}`);
+    }
+  }
+  dataCheckEntries.sort();
+  const dataCheckString = dataCheckEntries.join("\n");
+
+  const secret = crypto.createHmac("sha256", "WebAppData").update(botToken).digest();
+  const computedHash = crypto.createHmac("sha256", secret).update(dataCheckString).digest("hex");
+
+  try {
+    return crypto.timingSafeEqual(Buffer.from(computedHash, "hex"), Buffer.from(hash, "hex"));
+  } catch {
+    return false;
+  }
+}
+
+export function getTelegramUserFromRequest(req: NextRequest): TelegramUserInfo | null {
+  const initDataHeader = req.headers.get("x-telegram-init-data");
+  if (initDataHeader && isValidTelegramInitData(initDataHeader)) {
+    const id = parseTelegramUserIdFromInitData(initDataHeader);
+    if (id) {
+      return { id };
+    }
+  }
+
+  // Dev fallback when opened outside Telegram.
+  const fallbackUserId = req.headers.get("x-telegram-user-id");
+  if (fallbackUserId) {
+    return { id: fallbackUserId };
+  }
+
+  return null;
+}
+
+export function assertAdmin(req: NextRequest): { ok: true } | { ok: false; message: string; status: number } {
+  const adminId = process.env.ADMIN_ID;
+  if (!adminId) {
+    return { ok: false, message: "ADMIN_ID is not configured", status: 500 };
+  }
+
+  const requester = getTelegramUserFromRequest(req);
+  if (!requester || requester.id !== adminId) {
+    return { ok: false, message: "Forbidden", status: 403 };
+  }
+
+  return { ok: true };
+}
