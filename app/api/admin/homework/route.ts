@@ -23,6 +23,9 @@ export async function PUT(req: NextRequest) {
   }
 
   const deadlineAt = deadlineFromParts(date, hours, minutes);
+  if (!deadlineAt) {
+    return NextResponse.json({ message: "Invalid deadline date/time format" }, { status: 400 });
+  }
 
   const { error: hwError } = await supabase.from("homework").upsert(
     { subject, date, hours, minutes, deadline_at: deadlineAt },

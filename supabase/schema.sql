@@ -27,7 +27,7 @@ create table if not exists schedule_entries (
   id uuid primary key default gen_random_uuid(),
   date_key text not null,
   pair_number int not null,
-  subjectName text not null,
+  subjectname text not null,
   type text not null,
   number text not null,
   room text not null,

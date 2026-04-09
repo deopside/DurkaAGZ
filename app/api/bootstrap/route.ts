@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/server/supabase";
 import { getTelegramUserFromRequest } from "@/lib/server/auth";
+import { mskPartsFromUtcIso } from "@/lib/server/time";
 
 export async function GET(req: NextRequest) {
   try {
@@ -11,7 +12,7 @@ export async function GET(req: NextRequest) {
 
     const [{ data: homeworkRows, error: hwError }, { data: topicRows, error: topicError }, { data: scheduleRows, error: schError }, { data: assignmentRows, error: assignError }, { data: notificationRows, error: notifError }] =
       await Promise.all([
-        supabase.from("homework").select("subject,date,hours,minutes"),
+        supabase.from("homework").select("subject,date,hours,minutes,deadline_at"),
         supabase.from("homework_topics").select("subject,topic_id,text"),
         supabase.from("schedule_entries").select("id,date_key,pair_number,subjectname,type,number,room,teacher"),
         telegramUserId ? supabase.from("topic_assignments").select("subject,topic_id").eq("telegram_user_id", telegramUserId).limit(1) : Promise.resolve({ data: [], error: null }),
@@ -40,11 +41,12 @@ export async function GET(req: NextRequest) {
 
     const homeworkData: Record<string, { date: string; topics: { id: number; text: string }[]; hours?: string; minutes?: string }> = {};
     for (const row of homeworkRows ?? []) {
+      const mskParts = row.deadline_at ? mskPartsFromUtcIso(row.deadline_at) : null;
       homeworkData[row.subject] = {
-        date: row.date,
+        date: mskParts?.date ?? row.date,
         topics: [],
-        hours: row.hours ?? "10",
-        minutes: row.minutes ?? "00",
+        hours: mskParts?.hours ?? row.hours ?? "10",
+        minutes: mskParts?.minutes ?? row.minutes ?? "00",
       };
     }
 

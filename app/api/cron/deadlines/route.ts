@@ -3,6 +3,7 @@ import { supabase } from "@/lib/server/supabase";
 import { sendTelegramMessage } from "@/lib/server/telegram";
 
 const WINDOWS_HOURS = [24, 12];
+const WINDOW_TOLERANCE_MINUTES = 5;
 
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -40,19 +41,36 @@ export async function POST(req: NextRequest) {
     settingsByUser.set(row.telegram_user_id, row);
   }
 
+  const homeworkBySubject = new Map<string, { date: string; deadline_at: string }>();
+  for (const row of homeworkRows ?? []) {
+    if (row.deadline_at) {
+      homeworkBySubject.set(row.subject, { date: row.date, deadline_at: row.deadline_at });
+    }
+  }
+
   let sentCount = 0;
+  const errors: string[] = [];
   for (const assignment of assignments ?? []) {
-    const homework = homeworkRows?.find((h) => h.subject === assignment.subject);
+    const homework = homeworkBySubject.get(assignment.subject);
     if (!homework?.deadline_at) {
       continue;
     }
 
-    const deadlineMs = new Date(homework.deadline_at).getTime();
-    const diffHours = (deadlineMs - now.getTime()) / (1000 * 60 * 60);
+    const deadlineAt = new Date(homework.deadline_at);
+    if (Number.isNaN(deadlineAt.getTime())) {
+      continue;
+    }
+
+    const diffMs = deadlineAt.getTime() - now.getTime();
+    if (diffMs < 0) {
+      continue;
+    }
 
     for (const windowHours of WINDOWS_HOURS) {
-      const delta = Math.abs(diffHours - windowHours);
-      if (delta > 0.5) {
+      const targetMs = windowHours * 60 * 60 * 1000;
+      const toleranceMs = WINDOW_TOLERANCE_MINUTES * 60 * 1000;
+      const isInWindow = Math.abs(diffMs - targetMs) <= toleranceMs;
+      if (!isInWindow) {
         continue;
       }
 
@@ -77,19 +95,29 @@ export async function POST(req: NextRequest) {
       }
 
       const text = `Напоминание: до дедлайна по ${assignment.subject} осталось ${windowHours} часов.\nТема #${assignment.topic_id}. Дата сдачи: ${homework.date}`;
-      await sendTelegramMessage(assignment.telegram_user_id, text);
 
-      await supabase.from("notification_logs").insert({
-        telegram_user_id: assignment.telegram_user_id,
-        subject: assignment.subject,
-        topic_id: assignment.topic_id,
-        window_hours: windowHours,
-        deadline_at: homework.deadline_at,
-      });
+      try {
+        await sendTelegramMessage(assignment.telegram_user_id, text);
 
-      sentCount += 1;
+        const { error: logInsertError } = await supabase.from("notification_logs").insert({
+          telegram_user_id: assignment.telegram_user_id,
+          subject: assignment.subject,
+          topic_id: assignment.topic_id,
+          window_hours: windowHours,
+          deadline_at: homework.deadline_at,
+        });
+        if (logInsertError) {
+          errors.push(`notification log insert failed for user ${assignment.telegram_user_id}: ${logInsertError.message}`);
+          continue;
+        }
+
+        sentCount += 1;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown send error";
+        errors.push(`send failed for user ${assignment.telegram_user_id}: ${message}`);
+      }
     }
   }
 
-  return NextResponse.json({ ok: true, sentCount });
+  return NextResponse.json({ ok: true, sentCount, errors });
 }
