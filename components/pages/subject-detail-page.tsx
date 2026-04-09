@@ -41,10 +41,13 @@ export default function SubjectDetailPage({
     const topicId = Number(trimmedValue);
 
     // Step 1: Check if user already has a topic assigned
-    if (userAssignment && userAssignment.subject === subject) {
+    if (userAssignment) {
       toast({
         title: 'Ошибка',
-        description: `Вы уже выбрали тему ${userAssignment.topicId}. Нажмите отменить чтобы отказаться от нее.`,
+        description:
+          userAssignment.subject === subject
+            ? `Вы уже выбрали тему ${userAssignment.topicId}. Нажмите 'Отменить', чтобы отказаться от неё.`
+            : "Вы уже выбрали другую тему. Нажмите 'Отменить', чтобы сменить её",
         variant: 'destructive',
       });
       return;
@@ -80,7 +83,7 @@ export default function SubjectDetailPage({
           if (result.message === 'Topic already taken') {
             toast({
               title: 'Ошибка',
-              description: 'Данная тема уже занята. Выберите другую',
+              description: 'Эта тема уже занята другим пользователем',
               variant: 'destructive',
             });
             return;
@@ -104,6 +107,7 @@ export default function SubjectDetailPage({
       }
 
       toast({
+        title: 'Успешно',
         description: `Тема ${topicId} закреплена за вашим аккаунтом. Выполните до ${homework.date}`,
       });
       setTopicInput('');
@@ -192,14 +196,18 @@ export default function SubjectDetailPage({
       </form>
 
       {/* Status Display */}
-      {isUserAssignedToThisSubject && (
+      {userAssignment && (
         <div className="space-y-3">
           <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 text-center">
-            <p className="text-sm font-semibold text-white">Вы выбрали тему {userAssignment.topicId}</p>
+            <p className="text-sm font-semibold text-white">
+              Вы выбрали тему {userAssignment.topicId}
+              {!isUserAssignedToThisSubject ? ` (${userAssignment.subject})` : ''}
+            </p>
           </div>
           <Button
             onClick={handleCancel}
             className="w-full bg-red-700 hover:bg-red-800 text-white font-semibold"
+            disabled={isSubmitting}
           >
             Отменить
           </Button>

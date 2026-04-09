@@ -10,21 +10,30 @@ export async function GET(req: NextRequest) {
     const adminId = (process.env.ADMIN_ID ?? "").trim();
     const isAdmin = telegramUserId !== null && telegramUserId === adminId;
 
-    const [{ data: homeworkRows, error: hwError }, { data: topicRows, error: topicError }, { data: scheduleRows, error: schError }, { data: assignmentRows, error: assignError }, { data: notificationRows, error: notifError }] =
+    const [
+      { data: homeworkRows, error: hwError },
+      { data: topicRows, error: topicError },
+      { data: scheduleRows, error: schError },
+      { data: userAssignmentRows, error: userAssignError },
+      { data: allAssignmentsRows, error: allAssignError },
+      { data: notificationRows, error: notifError },
+    ] =
       await Promise.all([
         supabase.from("homework").select("subject,date,hours,minutes,deadline_at"),
         supabase.from("homework_topics").select("subject,topic_id,text"),
         supabase.from("schedule_entries").select("id,date_key,pair_number,subjectname,type,number,room,teacher"),
         telegramUserId ? supabase.from("topic_assignments").select("subject,topic_id").eq("telegram_user_id", telegramUserId).limit(1) : Promise.resolve({ data: [], error: null }),
+        supabase.from("topic_assignments").select("subject,topic_id"),
         telegramUserId ? supabase.from("notification_settings").select("twenty_four_hours,twelve_hours").eq("telegram_user_id", telegramUserId).limit(1) : Promise.resolve({ data: [], error: null }),
       ]);
 
-    if (hwError || topicError || schError || assignError || notifError) {
+    if (hwError || topicError || schError || userAssignError || allAssignError || notifError) {
       console.error("Bootstrap query error", {
         hwError,
         topicError,
         schError,
-        assignError,
+        userAssignError,
+        allAssignError,
         notifError,
         telegramUserId,
       });
@@ -80,8 +89,8 @@ export async function GET(req: NextRequest) {
       scheduleData[dateKey].sort((a, b) => a.pairNumber - b.pairNumber);
     }
 
-    const takenTopics = (assignmentRows ?? []).map((a) => `${a.subject}-${a.topic_id}`);
-    const userAssignment = assignmentRows?.[0] ? { subject: assignmentRows[0].subject, topicId: assignmentRows[0].topic_id } : null;
+    const takenTopics = (allAssignmentsRows ?? []).map((a) => `${a.subject}-${a.topic_id}`);
+    const userAssignment = userAssignmentRows?.[0] ? { subject: userAssignmentRows[0].subject, topicId: userAssignmentRows[0].topic_id } : null;
     const notificationSettings = notifError || !notificationRows?.[0]
       ? { twentyFourHours: true, twelveHours: false }
       : {
