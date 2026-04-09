@@ -9,20 +9,22 @@ import { useHomework } from '@/lib/homework-context';
 
 interface SubjectDetailPageProps {
   subject: string;
-  onNavigateToNotifications: () => void;
   onBackToHome: () => void;
 }
 
+const SERVER_OR_AUTH = 'Ошибка сервера или авторизации';
+
 export default function SubjectDetailPage({
   subject,
-  onNavigateToNotifications,
   onBackToHome,
 }: SubjectDetailPageProps) {
-  const { homeworkData, userAssignment, assignTopicToUser, cancelUserAssignment, isTopicTaken } = useHomework();
-  const homework = homeworkData[subject];
+  const { homeworkData, userAssignmentsBySubject, assignTopicToUser, cancelUserAssignment, isTopicTaken } = useHomework();
+  const homework = homeworkData[subject] ?? { date: '—', topics: [] };
   const [topicInput, setTopicInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+
+  const assignedTopicId = userAssignmentsBySubject[subject];
 
   const handleSubmitTopic = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,20 +42,15 @@ export default function SubjectDetailPage({
 
     const topicId = Number(trimmedValue);
 
-    // Step 1: Check if user already has a topic assigned
-    if (userAssignment) {
+    if (assignedTopicId !== undefined) {
       toast({
         title: 'Ошибка',
-        description:
-          userAssignment.subject === subject
-            ? `Вы уже выбрали тему ${userAssignment.topicId}. Нажмите 'Отменить', чтобы отказаться от неё.`
-            : "Вы уже выбрали другую тему. Нажмите 'Отменить', чтобы сменить её",
+        description: `Вы уже выбрали тему ${assignedTopicId} по этому предмету. Нажмите «Отменить», чтобы отказаться от неё.`,
         variant: 'destructive',
       });
       return;
     }
 
-    // Step 2: Check if topic exists
     const topicExists = homework.topics.some(t => t.id === topicId);
     if (!topicExists) {
       toast({
@@ -64,7 +61,6 @@ export default function SubjectDetailPage({
       return;
     }
 
-    // Step 3: Check if topic is already taken
     if (isTopicTaken(subject, topicId)) {
       toast({
         title: 'Ошибка',
@@ -76,58 +72,66 @@ export default function SubjectDetailPage({
 
     setIsSubmitting(true);
     try {
-      // Success: Assign topic to user
       const result = await assignTopicToUser(subject, topicId);
       if (!result.ok) {
-        if (result.status === 409) {
-          if (result.message === 'Topic already taken') {
-            toast({
-              title: 'Ошибка',
-              description: 'Эта тема уже занята другим пользователем',
-              variant: 'destructive',
-            });
-            return;
-          }
-          if (result.message === 'User already has assigned topic') {
-            toast({
-              title: 'Ошибка',
-              description: "Вы уже выбрали другую тему. Нажмите 'Отменить', чтобы сменить её",
-              variant: 'destructive',
-            });
-            return;
-          }
+        const st = result.status;
+        if (st === 409) {
+          toast({
+            title: 'Конфликт',
+            description: result.message ?? 'Запрос отклонён',
+            variant: 'destructive',
+          });
+          return;
         }
-
+        if (st === 401 || st === 403 || st === 500 || st === 503) {
+          toast({
+            title: 'Ошибка',
+            description: SERVER_OR_AUTH,
+            variant: 'destructive',
+          });
+          return;
+        }
         toast({
           title: 'Ошибка',
-          description: result.message ?? 'Ошибка сервера. Попробуйте позже',
+          description: result.message ?? SERVER_OR_AUTH,
           variant: 'destructive',
         });
         return;
       }
 
       toast({
-        title: 'Успешно',
-        description: `Тема ${topicId} закреплена за вашим аккаунтом. Выполните до ${homework.date}`,
+        title: 'Тема закреплена',
+        description: `Тема ${topicId} закреплена за вами. Срок: ${homework.date}`,
       });
       setTopicInput('');
+    } catch {
+      toast({
+        title: 'Ошибка',
+        description: SERVER_OR_AUTH,
+        variant: 'destructive',
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleCancel = async () => {
-    await cancelUserAssignment();
-    toast({
-      description: 'Вы отменили выбор темы',
-    });
+    try {
+      await cancelUserAssignment(subject);
+      toast({
+        description: 'Вы отменили выбор темы',
+      });
+    } catch {
+      toast({
+        title: 'Ошибка',
+        description: SERVER_OR_AUTH,
+        variant: 'destructive',
+      });
+    }
   };
-
-  const isUserAssignedToThisSubject = userAssignment && userAssignment.subject === subject;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-2">
         <button
           onClick={onBackToHome}
@@ -135,23 +139,18 @@ export default function SubjectDetailPage({
         >
           <ChevronLeft size={20} className="text-white" />
         </button>
-        <h1 className="text-xl font-bold text-white">DurkaAGZ</h1>
-        <button
-          onClick={onNavigateToNotifications}
-          className="ml-auto text-sm text-gray-300 hover:text-white transition"
-        >
-          Оповещение
-        </button>
-        <h2 className="text-lg font-semibold text-white">{subject}</h2>
+        <div className="min-w-0 flex-1">
+          <h1 className="text-xl font-bold text-white truncate">DurkaAGZ</h1>
+          <h2 className="text-lg font-semibold text-white truncate">{subject}</h2>
+        </div>
       </div>
 
-      {/* Homework Display */}
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
         <div className="flex items-center gap-2">
           <span className="text-sm text-gray-400">Дата сдачи:</span>
           <span className="text-sm font-semibold text-white">{homework.date}</span>
         </div>
-        
+
         {homework.topics.length > 0 && (
           <div>
             <p className="text-sm text-gray-400 mb-2">Доступные темы:</p>
@@ -166,7 +165,6 @@ export default function SubjectDetailPage({
         )}
       </div>
 
-      {/* Topic Input */}
       <form onSubmit={handleSubmitTopic} className="space-y-3">
         <p className="text-sm text-gray-400">Введите номер темы:</p>
         <div className="flex gap-2">
@@ -195,17 +193,15 @@ export default function SubjectDetailPage({
         </div>
       </form>
 
-      {/* Status Display */}
-      {userAssignment && (
+      {assignedTopicId !== undefined && (
         <div className="space-y-3">
           <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 text-center">
             <p className="text-sm font-semibold text-white">
-              Вы выбрали тему {userAssignment.topicId}
-              {!isUserAssignedToThisSubject ? ` (${userAssignment.subject})` : ''}
+              Тема закреплена: №{assignedTopicId}
             </p>
           </div>
           <Button
-            onClick={handleCancel}
+            onClick={() => void handleCancel()}
             className="w-full bg-red-700 hover:bg-red-800 text-white font-semibold"
             disabled={isSubmitting}
           >
@@ -214,7 +210,6 @@ export default function SubjectDetailPage({
         </div>
       )}
 
-      {/* Footer */}
       <div className="text-center pt-4 border-t border-gray-800">
         <p className="text-xs text-gray-600">made by deopside</p>
       </div>

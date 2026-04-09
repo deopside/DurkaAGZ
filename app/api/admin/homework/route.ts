@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertAdmin } from "@/lib/server/auth";
-import { supabase } from "@/lib/server/supabase";
+import { getSupabase } from "@/lib/server/supabase";
 import { deadlineFromParts } from "@/lib/server/time";
 
 export async function PUT(req: NextRequest) {
   const adminCheck = assertAdmin(req);
   if (!adminCheck.ok) {
     return NextResponse.json({ message: adminCheck.message }, { status: adminCheck.status });
+  }
+
+  const supabase = getSupabase();
+  if (!supabase) {
+    return NextResponse.json({ message: "Сервер базы данных не настроен" }, { status: 503 });
   }
 
   const body = await req.json();
@@ -55,6 +60,11 @@ export async function DELETE(req: NextRequest) {
   const adminCheck = assertAdmin(req);
   if (!adminCheck.ok) {
     return NextResponse.json({ message: adminCheck.message }, { status: adminCheck.status });
+  }
+
+  const supabase = getSupabase();
+  if (!supabase) {
+    return NextResponse.json({ message: "Сервер базы данных не настроен" }, { status: 503 });
   }
 
   const { searchParams } = new URL(req.url);

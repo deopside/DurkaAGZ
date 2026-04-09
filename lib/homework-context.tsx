@@ -2,22 +2,19 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { getTelegramInitData, getTelegramUserId } from '@/lib/telegram-webapp';
-import type { DailySchedule, HomeworkData, NotificationSettings, ScheduleEntry, Topic, UserAssignment } from '@/lib/types';
+import type { DailySchedule, HomeworkData, ScheduleEntry, Topic } from '@/lib/types';
 
 interface HomeworkContextValue {
   homeworkData: HomeworkData;
   updateTopics: (subject: string, date: string, topics: Topic[], hours?: string, minutes?: string) => Promise<void>;
   clearTopics: (subject: string) => Promise<void>;
-  userAssignment: UserAssignment | null;
+  userAssignmentsBySubject: Record<string, number>;
   assignTopicToUser: (subject: string, topicId: number) => Promise<{ ok: boolean; status?: number; message?: string }>;
-  cancelUserAssignment: () => Promise<void>;
+  cancelUserAssignment: (subject: string) => Promise<void>;
   isTopicTaken: (subject: string, topicId: number) => boolean;
   scheduleData: DailySchedule;
   getScheduleForDate: (day: number, month: number, year: number) => ScheduleEntry[];
   updateScheduleForDate: (day: number, month: number, year: number, entries: ScheduleEntry[]) => Promise<void>;
-  notificationSettings: NotificationSettings;
-  setNotificationSettings: (settings: NotificationSettings) => void;
-  saveNotificationSettings: (settings: NotificationSettings) => Promise<void>;
   isLoading: boolean;
   isAdmin: boolean;
 }
@@ -39,25 +36,24 @@ const HomeworkContext = createContext<HomeworkContextValue | null>(null);
 
 export function HomeworkProvider({ children }: { children: ReactNode }) {
   const [homeworkData, setHomeworkData] = useState<HomeworkData>(defaultHomeworkData);
-  const [userAssignment, setUserAssignment] = useState<UserAssignment | null>(null);
+  const [userAssignmentsBySubject, setUserAssignmentsBySubject] = useState<Record<string, number>>({});
   const [takenTopics, setTakenTopics] = useState<Set<string>>(new Set());
   const [scheduleData, setScheduleData] = useState<DailySchedule>({});
-  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>({
-    twentyFourHours: true,
-    twelveHours: false,
-  });
   const [isLoading, setIsLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
 
   const telegramUserId = useMemo(() => getTelegramUserId(), []);
   const telegramInitData = useMemo(() => getTelegramInitData(), []);
-  const authHeaders = useMemo(
-    () => ({
-      ...(telegramUserId ? { 'x-telegram-user-id': telegramUserId } : {}),
-      ...(telegramInitData ? { 'x-telegram-init-data': encodeURIComponent(telegramInitData) } : {}),
-    }),
-    [telegramUserId, telegramInitData],
-  );
+  const authHeaders = useMemo(() => {
+    const h: Record<string, string> = {};
+    if (telegramUserId) {
+      h['x-telegram-user-id'] = telegramUserId;
+    }
+    if (telegramInitData) {
+      h['x-telegram-init-data'] = telegramInitData;
+    }
+    return h;
+  }, [telegramUserId, telegramInitData]);
 
   const fetchOrThrow = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const response = await fetch(input, init);
@@ -69,31 +65,58 @@ export function HomeworkProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    let cancelled = false;
+
     const bootstrap = async () => {
       try {
-        const response = await fetch('/api/bootstrap', { headers: authHeaders });
-        if (!response.ok) return;
-        const payload = await response.json();
-        if (payload.homeworkData && Object.keys(payload.homeworkData).length > 0) {
-          setHomeworkData(payload.homeworkData);
+        const response = await fetch('/api/bootstrap', { headers: authHeaders }).catch((err) => {
+          console.error('Bootstrap fetch failed:', err);
+          return null;
+        });
+
+        if (!response) {
+          return;
         }
-        if (payload.scheduleData && Object.keys(payload.scheduleData).length > 0) {
-          setScheduleData(payload.scheduleData);
+
+        const payload = await response.json().catch((err) => {
+          console.error('Bootstrap JSON parse failed:', err);
+          return {} as Record<string, unknown>;
+        });
+
+        if (cancelled) {
+          return;
         }
-        if (payload.userAssignment) {
-          setUserAssignment(payload.userAssignment);
+
+        if (payload.homeworkData && typeof payload.homeworkData === 'object' && Object.keys(payload.homeworkData as object).length > 0) {
+          setHomeworkData(payload.homeworkData as HomeworkData);
+        }
+        if (payload.scheduleData && typeof payload.scheduleData === 'object' && Object.keys(payload.scheduleData as object).length > 0) {
+          setScheduleData(payload.scheduleData as DailySchedule);
+        }
+        if (payload.userAssignmentsBySubject && typeof payload.userAssignmentsBySubject === 'object') {
+          setUserAssignmentsBySubject(payload.userAssignmentsBySubject as Record<string, number>);
         } else {
-          setUserAssignment(null);
+          setUserAssignmentsBySubject({});
         }
-        if (Array.isArray(payload.takenTopics)) setTakenTopics(new Set(payload.takenTopics));
-        if (payload.notificationSettings) setNotificationSettings(payload.notificationSettings);
-        setIsAdmin(Boolean(payload.isAdmin));
+        if (Array.isArray(payload.takenTopics)) {
+          setTakenTopics(new Set(payload.takenTopics as string[]));
+        }
+        if (typeof payload.isAdmin === 'boolean') {
+          setIsAdmin(payload.isAdmin);
+        }
+      } catch (err) {
+        console.error('Bootstrap error:', err);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     };
 
-    bootstrap();
+    void bootstrap();
+    return () => {
+      cancelled = true;
+    };
   }, [authHeaders]);
 
   const updateTopics = async (subject: string, date: string, topics: Topic[], hours = '10', minutes = '00') => {
@@ -117,7 +140,11 @@ export function HomeworkProvider({ children }: { children: ReactNode }) {
       ...prev,
       [subject]: { ...prev[subject], topics: [] },
     }));
-    setUserAssignment(prev => (prev?.subject === subject ? null : prev));
+    setUserAssignmentsBySubject(prev => {
+      const next = { ...prev };
+      delete next[subject];
+      return next;
+    });
     setTakenTopics(prev => {
       const newSet = new Set(prev);
       for (const key of Array.from(newSet)) {
@@ -128,34 +155,48 @@ export function HomeworkProvider({ children }: { children: ReactNode }) {
   };
 
   const assignTopicToUser = async (subject: string, topicId: number) => {
-    const response = await fetch('/api/topics/assign', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders },
-      body: JSON.stringify({ subject, topicId }),
-    });
-    if (!response.ok) {
+    try {
+      const response = await fetch('/api/topics/assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ subject, topicId }),
+      });
       const payload = await response.json().catch(() => ({}));
-      return { ok: false, status: response.status, message: payload.message as string | undefined };
+      if (!response.ok) {
+        return {
+          ok: false as const,
+          status: response.status,
+          message: typeof payload.message === 'string' ? payload.message : undefined,
+        };
+      }
+      setUserAssignmentsBySubject(prev => ({ ...prev, [subject]: topicId }));
+      setTakenTopics(prev => new Set(prev).add(`${subject}-${topicId}`));
+      return { ok: true as const };
+    } catch (err) {
+      console.error('assignTopicToUser:', err);
+      return { ok: false as const, message: 'Не удалось связаться с сервером' };
     }
-    setUserAssignment({ subject, topicId });
-    setTakenTopics(prev => new Set(prev).add(`${subject}-${topicId}`));
-    return { ok: true };
   };
 
-  const cancelUserAssignment = async () => {
-    await fetchOrThrow('/api/topics/cancel', {
+  const cancelUserAssignment = async (subject: string) => {
+    await fetchOrThrow(`/api/topics/cancel?subject=${encodeURIComponent(subject)}`, {
       method: 'DELETE',
       headers: authHeaders,
     });
-    if (userAssignment) {
-      const key = `${userAssignment.subject}-${userAssignment.topicId}`;
-      setTakenTopics(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(key);
-        return newSet;
-      });
-    }
-    setUserAssignment(null);
+    setUserAssignmentsBySubject(prev => {
+      const topicId = prev[subject];
+      if (topicId !== undefined) {
+        const key = `${subject}-${topicId}`;
+        setTakenTopics(t => {
+          const nextSet = new Set(t);
+          nextSet.delete(key);
+          return nextSet;
+        });
+      }
+      const next = { ...prev };
+      delete next[subject];
+      return next;
+    });
   };
 
   const isTopicTaken = (subject: string, topicId: number): boolean => {
@@ -180,16 +221,23 @@ export function HomeworkProvider({ children }: { children: ReactNode }) {
     }));
   };
 
-  const saveNotificationSettings = async (settings: NotificationSettings) => {
-    await fetchOrThrow('/api/notifications/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', ...authHeaders },
-      body: JSON.stringify(settings),
-    });
-  };
-
   return (
-    <HomeworkContext.Provider value={{ homeworkData, updateTopics, clearTopics, userAssignment, assignTopicToUser, cancelUserAssignment, isTopicTaken, scheduleData, getScheduleForDate, updateScheduleForDate, notificationSettings, setNotificationSettings, saveNotificationSettings, isLoading, isAdmin }}>
+    <HomeworkContext.Provider
+      value={{
+        homeworkData,
+        updateTopics,
+        clearTopics,
+        userAssignmentsBySubject,
+        assignTopicToUser,
+        cancelUserAssignment,
+        isTopicTaken,
+        scheduleData,
+        getScheduleForDate,
+        updateScheduleForDate,
+        isLoading,
+        isAdmin,
+      }}
+    >
       {children}
     </HomeworkContext.Provider>
   );

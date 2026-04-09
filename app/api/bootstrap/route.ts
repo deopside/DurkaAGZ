@@ -1,51 +1,71 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/server/supabase";
+import { getSupabase } from "@/lib/server/supabase";
 import { getTelegramUserFromRequest } from "@/lib/server/auth";
 import { mskPartsFromUtcIso } from "@/lib/server/time";
 
+function computeIsAdmin(telegramUserId: string | null): boolean {
+  const adminId = (process.env.ADMIN_ID ?? "").trim();
+  if (!adminId || telegramUserId === null) {
+    return false;
+  }
+  return String(telegramUserId).trim() === String(adminId).trim();
+}
+
 export async function GET(req: NextRequest) {
+  let telegramUserId: string | null = null;
+  let isAdmin = false;
+
   try {
     const telegramUser = getTelegramUserFromRequest(req);
-    const telegramUserId = telegramUser?.id ?? null;
-    const adminId = (process.env.ADMIN_ID ?? "").trim();
-    const isAdmin = telegramUserId !== null && telegramUserId === adminId;
+    telegramUserId = telegramUser?.id ?? null;
+    isAdmin = computeIsAdmin(telegramUserId);
+  } catch (err) {
+    console.error("Bootstrap: getTelegramUserFromRequest failed:", err);
+    telegramUserId = null;
+    isAdmin = false;
+  }
 
+  const emptyPayload = {
+    homeworkData: {},
+    scheduleData: {},
+    userAssignmentsBySubject: {} as Record<string, number>,
+    takenTopics: [] as string[],
+    isAdmin,
+  };
+
+  const supabase = getSupabase();
+  if (!supabase) {
+    console.error("Bootstrap: Supabase is not configured");
+    return NextResponse.json(emptyPayload);
+  }
+
+  try {
     const [
       { data: homeworkRows, error: hwError },
       { data: topicRows, error: topicError },
       { data: scheduleRows, error: schError },
       { data: userAssignmentRows, error: userAssignError },
       { data: allAssignmentsRows, error: allAssignError },
-      { data: notificationRows, error: notifError },
-    ] =
-      await Promise.all([
-        supabase.from("homework").select("subject,date,hours,minutes,deadline_at"),
-        supabase.from("homework_topics").select("subject,topic_id,text"),
-        supabase.from("schedule_entries").select("id,date_key,pair_number,subjectname,type,number,room,teacher"),
-        telegramUserId ? supabase.from("topic_assignments").select("subject,topic_id").eq("telegram_user_id", telegramUserId).limit(1) : Promise.resolve({ data: [], error: null }),
-        supabase.from("topic_assignments").select("subject,topic_id"),
-        telegramUserId ? supabase.from("notification_settings").select("twenty_four_hours,twelve_hours").eq("telegram_user_id", telegramUserId).limit(1) : Promise.resolve({ data: [], error: null }),
-      ]);
+    ] = await Promise.all([
+      supabase.from("homework").select("subject,date,hours,minutes,deadline_at"),
+      supabase.from("homework_topics").select("subject,topic_id,text"),
+      supabase.from("schedule_entries").select("id,date_key,pair_number,subjectname,type,number,room,teacher"),
+      telegramUserId
+        ? supabase.from("topic_assignments").select("subject,topic_id").eq("telegram_user_id", telegramUserId)
+        : Promise.resolve({ data: [], error: null }),
+      supabase.from("topic_assignments").select("subject,topic_id"),
+    ]);
 
-    if (hwError || topicError || schError || userAssignError || allAssignError || notifError) {
+    if (hwError || topicError || schError || userAssignError || allAssignError) {
       console.error("Bootstrap query error", {
         hwError,
         topicError,
         schError,
         userAssignError,
         allAssignError,
-        notifError,
         telegramUserId,
       });
-
-      return NextResponse.json({
-        homeworkData: {},
-        scheduleData: {},
-        userAssignment: null,
-        takenTopics: [],
-        notificationSettings: { twentyFourHours: true, twelveHours: false },
-        isAdmin: false,
-      });
+      return NextResponse.json(emptyPayload);
     }
 
     const homeworkData: Record<string, { date: string; topics: { id: number; text: string }[]; hours?: string; minutes?: string }> = {};
@@ -90,24 +110,14 @@ export async function GET(req: NextRequest) {
     }
 
     const takenTopics = (allAssignmentsRows ?? []).map((a) => `${a.subject}-${a.topic_id}`);
-    const userAssignment = userAssignmentRows?.[0] ? { subject: userAssignmentRows[0].subject, topicId: userAssignmentRows[0].topic_id } : null;
-    const notificationSettings = notifError || !notificationRows?.[0]
-      ? { twentyFourHours: true, twelveHours: false }
-      : {
-          twentyFourHours: notificationRows[0].twenty_four_hours,
-          twelveHours: notificationRows[0].twelve_hours,
-        };
+    const userAssignmentsBySubject: Record<string, number> = {};
+    for (const row of userAssignmentRows ?? []) {
+      userAssignmentsBySubject[row.subject] = row.topic_id;
+    }
 
-    return NextResponse.json({ homeworkData, scheduleData, userAssignment, takenTopics, notificationSettings, isAdmin });
+    return NextResponse.json({ homeworkData, scheduleData, userAssignmentsBySubject, takenTopics, isAdmin });
   } catch (error) {
     console.error("Bootstrap endpoint failed:", error);
-    return NextResponse.json({
-      homeworkData: {},
-      scheduleData: {},
-      userAssignment: null,
-      takenTopics: [],
-      notificationSettings: { twentyFourHours: true, twelveHours: false },
-      isAdmin: false,
-    });
+    return NextResponse.json(emptyPayload);
   }
 }

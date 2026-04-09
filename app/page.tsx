@@ -4,19 +4,18 @@ import { useState } from 'react';
 import HomePage from '@/components/pages/home-page';
 import SubjectDetailPage from '@/components/pages/subject-detail-page';
 import AdminPanelPage from '@/components/pages/admin-panel-page';
-import NotificationsPage from '@/components/pages/notifications-page';
 import CalendarPage from '@/components/pages/calendar-page';
 import DailySchedulePage from '@/components/pages/daily-schedule-page';
 import AdminCalendarPage from '@/components/pages/admin-calendar-page';
 import { useHomework } from '@/lib/homework-context';
 
-type PageType = 'home' | 'detail' | 'admin' | 'notifications' | 'calendar' | 'daily-schedule' | 'admin-calendar';
+type PageType = 'home' | 'detail' | 'admin' | 'calendar' | 'daily-schedule' | 'admin-calendar';
 
 export default function Page() {
   const [currentPage, setCurrentPage] = useState<PageType>('home');
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<{ day: number; month: number; year: number } | null>(null);
-  const { notificationSettings, setNotificationSettings, saveNotificationSettings, isAdmin } = useHomework();
+  const { isAdmin } = useHomework();
 
   const subjects = [
     'РХБЗ', 'ОСМ', 'ППП', 'ТПМИ', 'SMM',
@@ -52,7 +51,6 @@ export default function Page() {
         {currentPage === 'detail' && selectedSubject && (
           <SubjectDetailPage
             subject={selectedSubject}
-            onNavigateToNotifications={() => setCurrentPage('notifications')}
             onBackToHome={() => setCurrentPage('home')}
           />
         )}
@@ -61,16 +59,6 @@ export default function Page() {
             subjects={subjects}
             onBackToHome={() => setCurrentPage('home')}
             onCalendarClick={() => setCurrentPage('admin-calendar')}
-          />
-        )}
-        {currentPage === 'notifications' && (
-          <NotificationsPage
-            settings={notificationSettings}
-            onSettingsUpdate={(settings) => {
-              setNotificationSettings(settings);
-              void saveNotificationSettings(settings);
-            }}
-            onBackToHome={() => setCurrentPage('home')}
           />
         )}
         {currentPage === 'calendar' && (

@@ -56,7 +56,12 @@ function isValidTelegramInitData(initData: string): boolean {
     const secret = crypto.createHmac("sha256", "WebAppData").update(botToken).digest();
     const computedHash = crypto.createHmac("sha256", secret).update(dataCheckString).digest("hex");
 
-    return crypto.timingSafeEqual(Buffer.from(computedHash, "hex"), Buffer.from(hash, "hex"));
+    const computedBuf = Buffer.from(computedHash, "hex");
+    const receivedBuf = Buffer.from(hash, "hex");
+    if (computedBuf.length !== receivedBuf.length) {
+      return false;
+    }
+    return crypto.timingSafeEqual(computedBuf, receivedBuf);
   } catch (error) {
     console.error("Telegram initData validation error:", error);
     return false;
@@ -71,7 +76,6 @@ export function getTelegramUserFromRequest(req: NextRequest): TelegramUserInfo |
       try {
         initDataHeader = decodeURIComponent(rawInitDataHeader);
       } catch {
-        // If header is already plain text, use as-is.
         initDataHeader = rawInitDataHeader;
       }
     }
@@ -110,7 +114,7 @@ export function assertAdmin(req: NextRequest): { ok: true } | { ok: false; messa
   }
 
   const requester = getTelegramUserFromRequest(req);
-  if (!requester || requester.id !== adminId) {
+  if (!requester || String(requester.id).trim() !== String(adminId).trim()) {
     return { ok: false, message: "Forbidden", status: 403 };
   }
 

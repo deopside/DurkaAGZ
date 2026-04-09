@@ -27,13 +27,3 @@ export interface ScheduleEntry {
 export interface DailySchedule {
   [dateKey: string]: ScheduleEntry[];
 }
-
-export interface UserAssignment {
-  topicId: number;
-  subject: string;
-}
-
-export interface NotificationSettings {
-  twentyFourHours: boolean;
-  twelveHours: boolean;
-}
