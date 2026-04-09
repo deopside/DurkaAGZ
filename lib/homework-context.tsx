@@ -9,7 +9,7 @@ interface HomeworkContextValue {
   updateTopics: (subject: string, date: string, topics: Topic[], hours?: string, minutes?: string) => Promise<void>;
   clearTopics: (subject: string) => Promise<void>;
   userAssignment: UserAssignment | null;
-  assignTopicToUser: (subject: string, topicId: number) => Promise<{ ok: boolean; message?: string }>;
+  assignTopicToUser: (subject: string, topicId: number) => Promise<{ ok: boolean; status?: number; message?: string }>;
   cancelUserAssignment: () => Promise<void>;
   isTopicTaken: (subject: string, topicId: number) => boolean;
   scheduleData: DailySchedule;
@@ -135,7 +135,7 @@ export function HomeworkProvider({ children }: { children: ReactNode }) {
     });
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
-      return { ok: false, message: payload.message as string | undefined };
+      return { ok: false, status: response.status, message: payload.message as string | undefined };
     }
     setUserAssignment({ subject, topicId });
     setTakenTopics(prev => new Set(prev).add(`${subject}-${topicId}`));

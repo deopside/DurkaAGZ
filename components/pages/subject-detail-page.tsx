@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
@@ -21,10 +21,12 @@ export default function SubjectDetailPage({
   const { homeworkData, userAssignment, assignTopicToUser, cancelUserAssignment, isTopicTaken } = useHomework();
   const homework = homeworkData[subject];
   const [topicInput, setTopicInput] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
   const handleSubmitTopic = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     const trimmedValue = topicInput.trim();
 
     if (!trimmedValue || isNaN(Number(trimmedValue))) {
@@ -69,20 +71,45 @@ export default function SubjectDetailPage({
       return;
     }
 
-    // Success: Assign topic to user
-    const result = await assignTopicToUser(subject, topicId);
-    if (!result.ok) {
+    setIsSubmitting(true);
+    try {
+      // Success: Assign topic to user
+      const result = await assignTopicToUser(subject, topicId);
+      if (!result.ok) {
+        if (result.status === 409) {
+          if (result.message === 'Topic already taken') {
+            toast({
+              title: 'Ошибка',
+              description: 'Данная тема уже занята. Выберите другую',
+              variant: 'destructive',
+            });
+            return;
+          }
+          if (result.message === 'User already has assigned topic') {
+            toast({
+              title: 'Ошибка',
+              description: "Вы уже выбрали другую тему. Нажмите 'Отменить', чтобы сменить её",
+              variant: 'destructive',
+            });
+            return;
+          }
+        }
+
+        toast({
+          title: 'Ошибка',
+          description: result.message ?? 'Ошибка сервера. Попробуйте позже',
+          variant: 'destructive',
+        });
+        return;
+      }
+
       toast({
-        title: 'Ошибка',
-        description: result.message ?? 'Не удалось закрепить тему',
-        variant: 'destructive',
+        description: `Тема ${topicId} закреплена за вашим аккаунтом. Выполните до ${homework.date}`,
       });
-      return;
+      setTopicInput('');
+    } finally {
+      setIsSubmitting(false);
     }
-    toast({
-      description: `Тема ${topicId} закреплена за вашим аккаунтом. Выполните до ${homework.date}`,
-    });
-    setTopicInput('');
   };
 
   const handleCancel = async () => {
@@ -144,13 +171,22 @@ export default function SubjectDetailPage({
             placeholder="Номер темы"
             value={topicInput}
             onChange={(e) => setTopicInput(e.target.value)}
+            disabled={isSubmitting}
             className="bg-gray-900 border-gray-800 text-white placeholder:text-gray-600"
           />
           <Button
             type="submit"
+            disabled={isSubmitting}
             className="bg-white text-black hover:bg-gray-200 font-semibold"
           >
-            Отправить
+            {isSubmitting ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Отправка...
+              </span>
+            ) : (
+              'Отправить'
+            )}
           </Button>
         </div>
       </form>
